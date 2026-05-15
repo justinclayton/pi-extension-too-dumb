@@ -17,11 +17,11 @@ The implied action for every warning is always `/compact or /new`.
 ## Install
 
 ```bash
-pi install git:github.com/justinclayton/pi-extension-too-dumb
+pi install npm:pi-extension-too-dumb
 ```
 
 Or project-local:
 
 ```bash
-pi install -l git:github.com/justinclayton/pi-extension-too-dumb
+pi install -l npm:pi-extension-too-dumb
 ```
