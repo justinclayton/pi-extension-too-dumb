@@ -1,6 +1,6 @@
 {
   "name": "pi-extension-too-dumb",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A pi extension that warns when session reasoning ability may be compromised",
   "keywords": [
     "pi-package"

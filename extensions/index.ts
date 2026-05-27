@@ -7,7 +7,7 @@
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
-import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import { visibleWidth } from "@earendil-works/pi-tui";
 
 // ── ANSI color constants ─────────────────────────────────────────────────────
 
@@ -28,22 +28,20 @@ interface Warning {
 
 // ── Widget rendering ─────────────────────────────────────────────────────────
 
-function buildLines(warning: Warning, width: number): string[] {
+function buildBanner(warning: Warning, width: number): string[] {
   const fg   = warning.severity === "red" ? RED_FG   : ORANGE_FG;
   const bg   = warning.severity === "red" ? RED_BG   : ORANGE_BG;
-  const icon = warning.severity === "red" ? "⛔"     : "⚠";
+  const text = warning.severity === "red"
+    ? " YOU ARE IN THE DUMB ZONE "
+    : " GETTING DUMBER ";
 
-  const renderLine = (text: string): string => {
-    const truncated = truncateToWidth(text, width);
-    // Pad to full width so the background tint spans the whole line.
-    const pad = " ".repeat(Math.max(0, width - visibleWidth(truncated)));
-    return `${bg}${fg}${truncated}${pad}${RESET}`;
-  };
+  const textLen = visibleWidth(text);
+  const fillTotal = Math.max(0, width - textLen);
+  const leftFill  = Math.floor(fillTotal / 2);
+  const rightFill = fillTotal - leftFill;
 
-  return [
-    renderLine(`▏ ${icon} ${warning.message}`),
-    renderLine(`▏ /compact to summarize or /new to start fresh`),
-  ];
+  const line = "=".repeat(leftFill) + text + "=".repeat(rightFill);
+  return [`${bg}${fg}${line}${RESET}`];
 }
 
 // ── Signal 1 — Context Window Fill ──────────────────────────────────────────
@@ -131,6 +129,26 @@ function computeSignal2(
   return null;
 }
 
+// ── Signal 4 — Absolute Token Count ─────────────────────────────────────────
+
+function computeSignal4(tokens: number | null): Warning | null {
+  if (tokens === null) return null;
+
+  if (tokens > 120_000) {
+    return {
+      severity: "red",
+      message: `Token count at ${Math.round(tokens / 1000)}k — deep in the dumb zone`,
+    };
+  }
+  if (tokens > 90_000) {
+    return {
+      severity: "orange",
+      message: `Token count at ${Math.round(tokens / 1000)}k — reasoning quality declining`,
+    };
+  }
+  return null;
+}
+
 // ── Signal 3 — Cache Efficiency ──────────────────────────────────────────────
 
 function computeSignal3(branch: any[]): Warning | null {
@@ -183,21 +201,29 @@ function computeSignal3(branch: any[]): Warning | null {
 //
 // Priority order (highest first):
 //   1. 🔴 Signal 1: context% > 90
-//   2. 🔴 Signal 3: cache ratio < 0.10
-//   3. 🟠 Signal 1: context% > 70
-//   4. 🟠 Signal 2: fill rate projection
-//   5. 🟠 Signal 3: cache ratio < 0.30
+//   2. 🔴 Signal 4: tokens > 120k
+//   3. 🔴 Signal 3: cache ratio < 0.10
+//   4. 🟠 Signal 4: tokens > 90k
+//   5. 🟠 Signal 1: context% > 70
+//   6. 🟠 Signal 2: fill rate projection
+//   7. 🟠 Signal 3: cache ratio < 0.30
 
 function computeWarning(
   contextPercent: number | null,
+  tokens: number | null,
   branch: any[],
   contextWindow: number,
 ): Warning | null {
   const s1 = computeSignal1(contextPercent);
   if (s1?.severity === "red") return s1;
 
+  const s4 = computeSignal4(tokens);
+  if (s4?.severity === "red") return s4;
+
   const s3 = computeSignal3(branch);
   if (s3?.severity === "red") return s3;
+
+  if (s4?.severity === "orange") return s4;
 
   if (s1?.severity === "orange") return s1;
 
@@ -215,36 +241,51 @@ export default function (pi: ExtensionAPI) {
   // Track the last rendered warning to avoid redundant setWidget calls.
   let lastKey: string | null | undefined ; // undefined = never computed
 
+  // Track which severity levels have already shown a toast this session.
+  const notifiedSeverities = new Set<Severity>();
+
   function warningKey(w: Warning | null): string | null {
     return w ? `${w.severity}:${w.message}` : null;
   }
 
   pi.on("session_start", async (_event, ctx) => {
     lastKey = undefined;
+    notifiedSeverities.clear();
     ctx.ui.setWidget("too-dumb", undefined);
   });
 
   pi.on("message_end", async (_event, ctx) => {
     const contextUsage  = ctx.getContextUsage();
     const contextPercent = contextUsage?.percent ?? null;
+    const tokens         = contextUsage?.tokens ?? null;
     const contextWindow  =
       contextUsage?.contextWindow ??
       ctx.model?.contextWindow ??
       128_000;
 
     const branch  = ctx.sessionManager.getBranch();
-    const warning = computeWarning(contextPercent, branch, contextWindow);
+    const warning = computeWarning(contextPercent, tokens, branch, contextWindow);
     const key     = warningKey(warning);
 
     if (key === lastKey) return; // No change — skip re-render.
     lastKey = key;
 
     if (warning) {
+      // Fire a one-time toast when entering a new severity level.
+      if (!notifiedSeverities.has(warning.severity)) {
+        notifiedSeverities.add(warning.severity);
+        const level = warning.severity === "red" ? "error" : "warning";
+        ctx.ui.notify(
+          `${warning.message} — /compact to summarize or /new to start fresh`,
+          level,
+        );
+      }
+
       // Capture `warning` value for the render closure.
       const w = warning;
       ctx.ui.setWidget("too-dumb", (_tui, _theme) => ({
         render(width: number): string[] {
-          return buildLines(w, width);
+          return buildBanner(w, width);
         },
         invalidate() {},
       }));
