@@ -1,10 +1,12 @@
 # pi-extension-too-dumb
 
-A [pi coding agent](https://pi.dev) extension that monitors session health and warns when the model's reasoning ability is likely to be compromised.
+A [pi coding agent](https://pi.dev) extension that warns when the model's reasoning ability is likely to be compromised.
 
-Instead of displaying raw token metrics for the user to interpret, this extension stays completely silent during normal operation. When a meaningful threshold is crossed, a single warning widget appears above the editor naming the triggered signal — educating as it warns.
+AKA when it's getting too dumb, and you should bail.
 
-The implied action for every warning is always `/compact or /new`.
+It does this mainly by displaying a banner that says "YOU ARE IN THE DUMB ZONE". 
+
+When you get this banner, it's probably time to `/compact` or `/new`.
 
 ## Signals
 
@@ -13,6 +15,7 @@ The implied action for every warning is always `/compact or /new`.
 | **Context window fill** | > 70% | > 90% |
 | **Context fill rate** | On pace to hit 70% in ~4 turns | — |
 | **Cache efficiency** | Reuse < 30% | Reuse < 10% |
+| **1M context window reasoning threshold** | 90k | 120k |
 
 ## Install
 
