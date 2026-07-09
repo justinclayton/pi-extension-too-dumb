@@ -1,0 +1,5 @@
+FROM llama3.2:latest
+# Large real context so Ollama never truncates our test prompt and
+# under-reports token usage. pi's *declared* contextWindow (set in
+# test/ollama-provider.ts) is what drives the percentage math.
+PARAMETER num_ctx 16384

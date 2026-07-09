@@ -1,0 +1,3 @@
+# Local test artifacts — never commit these.
+too-dumb-events.log
+pi-stderr.log
